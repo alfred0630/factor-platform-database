@@ -1,0 +1,3 @@
+{
+  "factors": ["EPS_growth", "High_yield", "High_yoy", "Low_beta", "Margin_growth", "Momentum_01", "Momentum_03", "Momentum_06","Top200"]
+}
