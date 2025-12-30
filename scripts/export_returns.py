@@ -153,9 +153,8 @@ def main():
         eps_growth_signal,
     )
 
-    # ---- 4) 建樣本池 & 各因子 alpha ----
-    # 你原本寫 top200 但 top_n=300；我保留你的行為
-    top200 = build_sample_pool(mktcap, top_n=300)
+
+    top200 = build_sample_pool(mktcap, top_n=200)
     top200_nofin = build_sample_pool_ex_fin(mktcap, finance_corp)
     top200_alpha = pool_to_alpha(returns, top200)
 
@@ -228,6 +227,14 @@ def main():
     ret_rev_growth = alp_return(sig_margin, returns)
     ret_eps_growth = alp_return(eps_up, returns)
 
+    tw  =pd.read_excel("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx",sheet_name="加權指數")
+
+    tw = tw.iloc[4:,1:]
+    tw.columns = ["date","twa00"]
+    tw = tw.set_index("date")
+
+    ret_twa00 = tw.pct_change().dropna()["twa00"]
+
     # ---- 6) 輸出到 data/returns/*.json ----
     outputs: Dict[str, pd.Series] = {
         "Top200": ret_top200,
@@ -241,6 +248,7 @@ def main():
         "High_yoy": ret_high_yoy,
         "Margin_growth": ret_rev_growth,
         "EPS_growth": ret_eps_growth,
+        "TWA00": ret_twa00
     }
 
     exported = []
@@ -251,6 +259,7 @@ def main():
     print(f"\n✅ 匯出完成：{len(exported)} 檔 → {OUT_DIR}")
     for p in exported:
         print(" -", p.name)
+
 
 
 if __name__ == "__main__":
