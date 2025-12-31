@@ -5,7 +5,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -16,8 +16,15 @@ import pandas as pd
 # =========================
 APP_ROOT = Path(__file__).resolve().parents[1]          # factor-platform/
 MERGED_DIR = APP_ROOT / "merged_csvs"
-OUT_DIR = APP_ROOT / "data" / "returns"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+RET_OUT_DIR = APP_ROOT / "data" / "returns"
+META_OUT_DIR = APP_ROOT / "data" / "factors"
+HOLD_OUT_DIR = APP_ROOT / "data" / "holdings"
+MANIFEST_FP = APP_ROOT / "data" / "manifest.json"
+
+RET_OUT_DIR.mkdir(parents=True, exist_ok=True)
+META_OUT_DIR.mkdir(parents=True, exist_ok=True)
+HOLD_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 讓 scripts/ 可以 import 專案根目錄的模組（alpha.py、clean_data.py 等）
 if str(APP_ROOT) not in sys.path:
@@ -45,8 +52,19 @@ def export_factor_json(name: str, s: pd.Series) -> Path:
         "dates": s.index.strftime("%Y-%m-%d").tolist(),
         "ret": s.astype(float).tolist(),
     }
-    fp = OUT_DIR / f"{safe_filename(name)}.json"
+    fp = RET_OUT_DIR / f"{safe_filename(name)}.json"
     fp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    return fp
+
+
+def export_meta_json(name: str, meta: dict) -> Path:
+    """輸出因子 meta JSON 到 data/factors/"""
+    # 確保 meta 裡 factor 一致
+    meta = dict(meta)
+    meta.setdefault("factor", name)
+
+    fp = META_OUT_DIR / f"{safe_filename(name)}.json"
+    fp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return fp
 
 
@@ -80,7 +98,6 @@ def alp_return(alpha_df: pd.DataFrame, returns_df: pd.DataFrame, empty_as_zero: 
     給定 alpha (0/1 矩陣) 和 returns，計算每日投組報酬（等權）。
     - 避免除以 0：當日無持股則回傳 0（或 NaN）
     """
-    # 對齊 index/columns
     a = alpha_df.reindex(index=returns_df.index, columns=returns_df.columns).fillna(0.0)
     r = returns_df.reindex(index=a.index, columns=a.columns)
 
@@ -93,6 +110,71 @@ def alp_return(alpha_df: pd.DataFrame, returns_df: pd.DataFrame, empty_as_zero: 
 
     port.name = "ret"
     return port
+
+
+def alpha_to_monthly_holdings(alpha_df: pd.DataFrame) -> Dict[str, List[str]]:
+    """
+    把日頻 alpha(0/1) 轉成「每月持股名單」：
+    - 每個月用『該月最後一個交易日』的 alpha 來代表該月持股
+    - 輸出: {"YYYY-MM": ["2330","2317",...], ...}
+    """
+    a = alpha_df.copy()
+    a.index = pd.to_datetime(a.index, errors="coerce")
+    a = a.sort_index()
+    a.columns = a.columns.astype(str).str.strip()
+
+    month_key = a.index.to_period("M")
+
+    holdings: Dict[str, List[str]] = {}
+    for m in month_key.unique():
+        mask = (month_key == m)
+        if not mask.any():
+            continue
+        last_day = a.index[mask][-1]
+        row = a.loc[last_day]
+        picks = row[row.astype(float) > 0].index.astype(str).tolist()
+        holdings[str(m)] = picks
+
+    return holdings
+
+
+def export_holdings_json(name: str, alpha_df: pd.DataFrame) -> Path:
+    """
+    輸出 holdings JSON 到 data/holdings/{factor}.json
+    """
+    h = alpha_to_monthly_holdings(alpha_df)
+    months = sorted(h.keys())
+
+    obj = {
+        "factor": name,
+        "asof": pd.Timestamp(alpha_df.index.max()).strftime("%Y-%m-%d") if len(alpha_df.index) else None,
+        "months": months,
+        "holdings": h
+    }
+
+    fp = HOLD_OUT_DIR / f"{safe_filename(name)}.json"
+    fp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return fp
+
+
+def export_manifest(outputs: Dict[str, pd.Series], meta_registry: Optional[Dict[str, dict]] = None) -> Path:
+    """
+    產 manifest.json，前端拿來列因子/判斷 detail 是否可用
+    """
+    factors = list(outputs.keys())
+    has_detail = []
+    if meta_registry:
+        for f in factors:
+            if f in meta_registry:
+                has_detail.append(f)
+
+    obj = {
+        "factors": factors,
+        "has_detail": has_detail,
+        "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    MANIFEST_FP.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return MANIFEST_FP
 
 
 # =========================
@@ -128,7 +210,6 @@ def main():
     eps = data.get("eps")
 
     # ---- 2) 讀金融保險名單（你原本的 Excel）----
-    # 注意：路徑以 factor-platform 為根目錄
     excel_fp = APP_ROOT / "因子資料全.xlsx"
     if not excel_fp.exists():
         raise FileNotFoundError(f"找不到 {excel_fp}（你用來排除金融股的 Excel）")
@@ -136,11 +217,7 @@ def main():
     finance_corp = pd.read_excel(excel_fp, sheet_name="金融保險（含下市櫃）")
 
     # ---- 3) import 你原本用的模組/函式 ----
-
     import alpha
-
-
-
     from alpha import (
         build_sample_pool,
         build_sample_pool_ex_fin,
@@ -153,7 +230,10 @@ def main():
         eps_growth_signal,
     )
 
+    # ✅ meta registry（你已經貼到 alpha.py 了）
+    FACTOR_META_REGISTRY = getattr(alpha, "FACTOR_META_REGISTRY", {})
 
+    # ---- 4) 建 pool / alpha 訊號 ----
     top200 = build_sample_pool(mktcap, top_n=200)
     top200_nofin = build_sample_pool_ex_fin(mktcap, finance_corp)
     top200_alpha = pool_to_alpha(returns, top200)
@@ -175,7 +255,6 @@ def main():
     high_yield_alpha = dy_high_signal(returns, yd, top200, require_positive=False)
 
     # 你原本 low_vol_alpha 其實是用 beta 做 pe_low_signal（等於選 beta 最低）
-    # 我照你的寫法保留
     if beta is None:
         raise RuntimeError("找不到 beta.csv，但你有用到 low_vol_alpha。")
     low_vol_alpha = pe_low_signal(returns, beta, top200, require_positive=True)
@@ -227,12 +306,19 @@ def main():
     ret_rev_growth = alp_return(sig_margin, returns)
     ret_eps_growth = alp_return(eps_up, returns)
 
-    tw  =pd.read_excel("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx",sheet_name="加權指數")
+    # ---- 5.5) Benchmark：加權指數 ----
+    # ⚠ 你原本是寫死 C: 路徑，這裡改成：優先用 APP_ROOT/更新因子.xlsx，找不到才用原本路徑
+    tw_fp1 = APP_ROOT / "更新因子.xlsx"
+    tw_fp2 = Path("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx")
 
-    tw = tw.iloc[4:,1:]
-    tw.columns = ["date","twa00"]
+    tw_fp = tw_fp1 if tw_fp1.exists() else tw_fp2
+    if not tw_fp.exists():
+        raise FileNotFoundError(f"找不到加權指數檔案：{tw_fp1} 或 {tw_fp2}")
+
+    tw = pd.read_excel(tw_fp, sheet_name="加權指數")
+    tw = tw.iloc[4:, 1:]
+    tw.columns = ["date", "twa00"]
     tw = tw.set_index("date")
-
     ret_twa00 = tw.pct_change().dropna()["twa00"]
 
     # ---- 6) 輸出到 data/returns/*.json ----
@@ -243,12 +329,12 @@ def main():
         "Momentum_06": ret_mom6,
         "PE_low": ret_pe_low1,
         "PB_low": ret_pb_low1,
-        "Low_beta": ret_low_vol,          # 你原本叫 low_vol，但邏輯是 beta 最低
+        "Low_beta": ret_low_vol,
         "High_yield": ret_high_yield,
         "High_yoy": ret_high_yoy,
         "Margin_growth": ret_rev_growth,
         "EPS_growth": ret_eps_growth,
-        "TWA00": ret_twa00
+        "TWA00": ret_twa00,
     }
 
     exported = []
@@ -256,10 +342,57 @@ def main():
         fp = export_factor_json(name, s)
         exported.append(fp)
 
-    print(f"\n✅ 匯出完成：{len(exported)} 檔 → {OUT_DIR}")
-    for p in exported:
-        print(" -", p.name)
+    print(f"\n✅ returns 匯出完成：{len(exported)} 檔 → {RET_OUT_DIR}")
 
+    # ---- 7) 輸出 factors meta（因子說明）----
+    meta_exported = []
+    for name in outputs.keys():
+        meta = FACTOR_META_REGISTRY.get(name)
+        if meta is None:
+            print(f"⚠ factors meta 找不到：{name}（alpha.py 的 FACTOR_META_REGISTRY 沒收錄）")
+            continue
+        fp = export_meta_json(name, meta)
+        meta_exported.append(fp)
+
+    print(f"✅ factors(meta) 匯出完成：{len(meta_exported)} 檔 → {META_OUT_DIR}")
+
+    # ---- 8) 輸出 holdings（每月持股名單，可回看）----
+    # 這裡用「實際 alpha 矩陣」去做 holdings，跟 returns 完全一致
+    alpha_outputs: Dict[str, pd.DataFrame] = {
+        "Top200": top200_alpha,
+        "Momentum_01": momentum_01_alpha,
+        "Momentum_03": momentum_03_alpha,
+        "Momentum_06": momentum_06_alpha,
+        "PE_low": pe_low_01_alpha,
+        "PB_low": pb_low_01_alpha,
+        "Low_beta": low_vol_alpha,
+        "High_yield": high_yield_alpha,
+        "High_yoy": high_yoy_alpha,
+        "Margin_growth": sig_margin,
+        "EPS_growth": eps_up,
+        # TWA00 沒有 holdings（指數）
+    }
+
+    hold_exported = []
+    for name, a in alpha_outputs.items():
+        fp = export_holdings_json(name, a)
+        hold_exported.append(fp)
+
+    print(f"✅ holdings 匯出完成：{len(hold_exported)} 檔 → {HOLD_OUT_DIR}")
+
+    # ---- 9) 輸出 manifest.json ----
+    mf = export_manifest(outputs, meta_registry=FACTOR_META_REGISTRY)
+    print(f"✅ manifest 匯出完成：{mf}")
+
+    # ---- 10) 印出檔名 ----
+    print("\n📦 匯出清單：")
+    for p in exported:
+        print(" - returns:", p.name)
+    for p in meta_exported:
+        print(" - factors:", p.name)
+    for p in hold_exported:
+        print(" - holdings:", p.name)
+    print(" - manifest:", mf.name)
 
 
 if __name__ == "__main__":

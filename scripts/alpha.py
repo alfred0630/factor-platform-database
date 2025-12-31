@@ -2,6 +2,328 @@ import numpy as np
 import pandas as pd
 
 
+
+# =========================
+# Factor METADATA (copy/paste)
+# Matches your alpha.py implementations
+# =========================
+
+TOP200_META = {
+    "factor": "Top200",
+    "display_name": "Top200 市值池",
+    "category": "Universe",
+    "rebalance": "M",
+    "universe": "Top200",
+    "holding_rule": "以當月市值排序取前 200 檔，作為『下個月』投資宇宙；持有月內等權持有該宇宙",
+    "params": {
+        "top_n": 200,
+        "source_func": "build_sample_pool / pool_to_alpha",
+        "timing": "pool[ym+1] = TopN(mktcap at ym)"
+    },
+    "timing_notes": "你在 build_sample_pool 明確用『當月市值→下月宇宙』，因此宇宙決策不前視；pool_to_alpha 會把 pool[m] 標記到 (m+1) 月交易日"
+}
+
+MOMENTUM_01_META = {
+    "factor": "Momentum_01",
+    "display_name": "動能（回看 1 個月）",
+    "category": "Momentum",
+    "rebalance": "M",
+    "universe": "Top200",
+    "holding_rule": (
+        "在『當月 m』的 Top200 宇宙內，計算『回看 1 個月（含當月）』日報酬的幾何累積報酬；"
+        "選取報酬排名前 30% 的股票，並只保留累積報酬 > 0；"
+        "於『下個月 m+1』整月等權持有"
+    ),
+    "params": {
+        "top_frac": 0.30,
+        "lookback_months": 1,
+        "require_positive_momentum": True,
+        "source_func": "momentum_signal"
+    },
+    "timing_notes": "momentum_signal 以『當月 m 的資料』決定『下月 m+1 持有』；並額外濾除動能 <= 0 的股票"
+}
+
+MOMENTUM_03_META = {
+    "factor": "Momentum_03",
+    "display_name": "動能（回看 3 個月）",
+    "category": "Momentum",
+    "rebalance": "M",
+    "universe": "Top200",
+    "holding_rule": (
+        "在『當月 m』的 Top200 宇宙內，計算『回看 3 個月（含當月）』日報酬的幾何累積報酬；"
+        "選取報酬排名前 30% 的股票，並只保留累積報酬 > 0；"
+        "於『下個月 m+1』整月等權持有"
+    ),
+    "params": {
+        "top_frac": 0.30,
+        "lookback_months": 3,
+        "require_positive_momentum": True,
+        "source_func": "momentum_signal"
+    },
+    "timing_notes": "momentum_signal 以『當月 m』挑選，配置到『下月 m+1』"
+}
+
+MOMENTUM_06_META = {
+    "factor": "Momentum_06",
+    "display_name": "動能（回看 6 個月）",
+    "category": "Momentum",
+    "rebalance": "M",
+    "universe": "Top200",
+    "holding_rule": (
+        "在『當月 m』的 Top200 宇宙內，計算『回看 6 個月（含當月）』日報酬的幾何累積報酬；"
+        "選取報酬排名前 30% 的股票，並只保留累積報酬 > 0；"
+        "於『下個月 m+1』整月等權持有"
+    ),
+    "params": {
+        "top_frac": 0.30,
+        "lookback_months": 6,
+        "require_positive_momentum": True,
+        "source_func": "momentum_signal"
+    },
+    "timing_notes": "momentum_signal 以『當月 m』挑選，配置到『下月 m+1』"
+}
+
+PE_LOW_META = {
+    "factor": "PE_low",
+    "display_name": "低本益比（PE）",
+    "category": "Value",
+    "rebalance": "M",
+    "universe": "Top200 ex-fin (由 pool 決定)",
+    "holding_rule": (
+        "以『上月 prev_m = m-1』的 PE 橫切面，在『上月的 TopN 宇宙（pool[prev_m]）』內排序；"
+        "若 require_positive=True 則只保留 PE>0；"
+        "取 PE 最低的 bottom_frac=30%；"
+        "於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "bottom_frac": 0.30,
+        "require_positive": True,
+        "source_func": "pe_low_signal",
+        "universe_key_used": "pool[prev_m] (prev_m=m-1)",
+        "decision_month": "m-1",
+        "holding_month": "m"
+    },
+    "timing_notes": "pe_low_signal 明確用上月指標決定本月持有；避免前視偏誤"
+}
+
+PB_LOW_META = {
+    "factor": "PB_low",
+    "display_name": "低股價淨值比（PB）",
+    "category": "Value",
+    "rebalance": "M",
+    "universe": "Top200 ex-fin (由 pool 決定)",
+    "holding_rule": (
+        "以『上月 prev_m = m-1』的 PB 橫切面，在『上月的 TopN 宇宙（pool[prev_m]）』內排序；"
+        "（你在 export_returns.py 用 pe_low_signal 套到 pb_ratio 上）"
+        "若 require_positive=True 則只保留 PB>0；"
+        "取 PB 最低的 bottom_frac=30%；"
+        "於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "bottom_frac": 0.30,
+        "require_positive": True,
+        "source_func": "pe_low_signal (applied to pb_ratio)",
+        "decision_month": "m-1",
+        "holding_month": "m"
+    },
+    "timing_notes": "同 PE_low：上月指標決定本月持有；避免前視"
+}
+
+LOW_BETA_META = {
+    "factor": "Low_beta",
+    "display_name": "低 Beta（用 pe_low_signal 選最小值）",
+    "category": "Defensive",
+    "rebalance": "M",
+    "universe": "Top200 (由 pool 決定)",
+    "holding_rule": (
+        "以『上月 prev_m = m-1』的 beta 橫切面，在『上月的 TopN 宇宙（pool[prev_m]）』內排序；"
+        "require_positive=True 只保留 beta>0；"
+        "取 beta 最低的 bottom_frac=30%；"
+        "於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "bottom_frac": 0.30,
+        "require_positive": True,
+        "source_func": "pe_low_signal (applied to beta)",
+        "decision_month": "m-1",
+        "holding_month": "m"
+    },
+    "timing_notes": "以 beta 的上月值做排序決定本月持有；避免前視"
+}
+
+HIGH_YIELD_META = {
+    "factor": "High_yield",
+    "display_name": "高殖利率",
+    "category": "Value",
+    "rebalance": "M",
+    "universe": "Top200 (由 pool 決定)",
+    "holding_rule": (
+        "以『上月 prev_m = m-1』的殖利率 DY 橫切面，在『上月的 TopN 宇宙（pool[prev_m]）』內排序；"
+        "若 require_positive=True 則只保留 DY>0；"
+        "取 DY 最高的 top_frac=30%；"
+        "於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "top_frac": 0.30,
+        "require_positive": False,  # 你 export_returns.py 呼叫 require_positive=False
+        "source_func": "dy_high_signal",
+        "decision_month": "m-1",
+        "holding_month": "m"
+    },
+    "timing_notes": "dy_high_signal 用上月 DY 決定本月持有；避免前視"
+}
+
+HIGH_YOY_META = {
+    "factor": "High_yoy",
+    "display_name": "高盈餘年增率",
+    "category": "Growth",
+    "rebalance": "M",
+    "universe": "Top200 (你修正為用 pool[m])",
+    "holding_rule": (
+        "以『prev_m = m-2』的 YoY 橫切面排序（yoy_is_percent=True 會先 /100）；"
+        "並剔除超過 yoy_cap_ratio 的極端值（預設 200%）；"
+        "在『本月 m 的 TopN 宇宙（pool[m]）』內取 YoY 最高的 top_frac=30%；"
+        "於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "top_frac": 0.30,
+        "yoy_cap_ratio": 200,
+        "yoy_is_percent": True,
+        "require_positive": False,
+        "decision_month": "m-2 (YoY data month)",
+        "holding_month": "m",
+        "universe_key_used": "pool[m]",
+        "source_func": "yoy_high_signal"
+    },
+    "timing_notes": "yoy_high_signal 目前用『兩個月前 prev_m=m-2 的 YoY』決定『本月 m 持有』；且宇宙使用 pool[m]（你註記為關鍵修正）"
+}
+
+EPS_GROWTH_META = {
+    "factor": "EPS_growth",
+    "display_name": "EPS 預估成長",
+    "category": "Growth",
+    "rebalance": "M",
+    "universe": "Top200 (用 pool[m])",
+    "holding_rule": (
+        "針對持有月 m：取觀察月 t=m-1 與前一月 t-1=m-2 的 EPS 預估值比較；"
+        "若 increase_strict=True 則要求 EPS[t] > EPS[t-1]（否則 EPS[t] >= EPS[t-1]）；"
+        "若 require_positive=True 則要求兩期 EPS 均 > 0；"
+        "符合者於『本月 m』整月等權持有"
+    ),
+    "params": {
+        "increase_strict": True,
+        "require_positive": True,
+        "decision_months_used": ["m-1", "m-2"],
+        "holding_month": "m",
+        "universe_key_used": "pool[m]",
+        "source_func": "eps_growth_signal"
+    },
+    "timing_notes": "eps_growth_signal 用 (m-1) 與 (m-2) 的 EPS 預估決定 m 月持有；避免前視需確保 eps_est 為當時可得的預估快照"
+}
+
+MARGIN_GROWTH_META = {
+    "factor": "Margin_growth",
+    "display_name": "利潤率連兩季成長（Gross & Operating）",
+    "category": "Quality",
+    "rebalance": "Q (但月內會套 mktcap_pool 做交集)",
+    "universe": "Top200 ex-fin (每月再與 pool[m] 交集)",
+    "holding_rule": (
+        "將 gross 與 operating（你傳入的是 rev）先對齊到 Q-DEC 季別（以該季最後一筆公告代表）；"
+        "判斷每季是否『連續兩季成長』（allow_equal=False 時為嚴格成長）；"
+        "為避免前視，對成長判斷結果 shift(1)，代表進場用的是『上季已確定』的成長訊號；"
+        "每季 q 對應一個進場月份（Q1→6月、Q2→9月、Q3→12月、Q4→次年4月），"
+        "並用該進場月的『最後一個交易日』作為持有開始日；"
+        "持有到下一次進場日前一日；持有期間每個月再與 pool[m] 取交集"
+    ),
+    "params": {
+        "allow_equal": False,
+        "source_func": "margin_growth_signal",
+        "quarter_entry_rule": "Q1->Jun, Q2->Sep, Q3->Dec, Q4->Apr(next year)",
+        "start_day_rule": "entry month last trading day",
+        "anti_lookahead": "both_ok = (gm_ok & om_ok).shift(1)"
+    },
+    "timing_notes": "此因子是『季訊號 + 月宇宙過濾 + 日頻展開』，時間對齊最敏感；你已用 shift(1) 明確避免前視"
+}
+
+QUANTREND_META = {
+    "factor": "QuanTrend",
+    "display_name": "QuanTrend（價格趨勢 × EPS 趨勢 × 估值）",
+    "category": "Multi-Factor",
+    "rebalance": "M",
+    "universe": "Top200 (用 pool[m])",
+    "holding_rule": (
+        "決策月 t=m-1："
+        "（1）本月底 60MA > 上月底 60MA；"
+        "（2）本月底 EPS 預估方向為上（EPS[t]>EPS[t-1] 或 EPS 持平但延續上期上升方向）；"
+        "（3）在同時符合(1)(2)者中，以本月底 PE 由小到大取前 n_select 檔；"
+        "於『下個月 m』整月等權持有"
+    ),
+    "params": {
+        "ma_window": 60,
+        "n_select": 20,
+        "require_positive_pe": True,
+        "decision_month": "t=m-1",
+        "holding_month": "m",
+        "universe_key_used": "pool[m]",
+        "source_func": "quantrend_sig"
+    },
+    "timing_notes": "quantrend_sig 明確用『決策月 t』資訊決定『下月 m=t+1』持有；避免前視偏誤"
+}
+
+MARGIN_SURPRISE_META = {
+    "factor": "Margin_surprise",
+    "display_name": "營利率 Surprise Index（SI）",
+    "category": "Quality",
+    "rebalance": "Q (但月內會套 mktcap_pool 做交集)",
+    "universe": "Top200 (每月再與 pool[m] 交集)",
+    "holding_rule": (
+        "將季頻營利率 margin_q 對齊至 Q-DEC；計算 YoY 變化 ΔMargin(q)=Margin(q)-Margin(q-4)；"
+        "以公告月最後一個交易日近似公告日：Q1→5月、Q2→8月、Q3→11月、Q4→次年3月；"
+        "計算 PR(q-1)：前一季公告後一日至本季公告前一日的股價報酬；"
+        "計算 SI(q)=Z(ΔMargin(q)) - Z(PR(q-1))；"
+        "取 SI>0 且排名前 top_frac=20% 做多；"
+        "進場/持有區間沿用 margin_growth_signal 的季度進場月份規則（Q1→6月、Q2→9月、Q3→12月、Q4→次年4月），"
+        "持有期間每個月再與 pool[m] 取交集"
+    ),
+    "params": {
+        "top_frac": 0.20,
+        "require_positive_margin": False,
+        "source_func": "margin_surprise_signal",
+        "announce_month_rule": "Q1->May, Q2->Aug, Q3->Nov, Q4->Mar(next year)",
+        "entry_month_rule": "Q1->Jun, Q2->Sep, Q3->Dec, Q4->Apr(next year)"
+    },
+    "timing_notes": "此因子以公告日窗口建構 PR(q-1)；避免前視需確保公告月與交易日對齊合理（你用『公告月最後交易日』近似）"
+}
+
+
+# Convenience registry (you can delete if you don't need it)
+FACTOR_META_REGISTRY = {
+    "Top200": TOP200_META,
+    "Momentum_01": MOMENTUM_01_META,
+    "Momentum_03": MOMENTUM_03_META,
+    "Momentum_06": MOMENTUM_06_META,
+    "PE_low": PE_LOW_META,
+    "PB_low": PB_LOW_META,
+    "Low_beta": LOW_BETA_META,
+    "High_yield": HIGH_YIELD_META,
+    "High_yoy": HIGH_YOY_META,
+    "EPS_growth": EPS_GROWTH_META,
+    "Margin_growth": MARGIN_GROWTH_META,
+    "QuanTrend": QUANTREND_META,
+    "Margin_surprise": MARGIN_SURPRISE_META,
+}
+
+
+
+
+#=========================
+
+
+
+
+
+
+
 def build_sample_pool(mktcap: pd.DataFrame, top_n: int = 200) -> dict:
     pool = {}
     for ym, row in mktcap.iterrows():
