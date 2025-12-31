@@ -10,8 +10,7 @@
     "High_yield",
     "High_yoy",
     "Margin_growth",
-    "EPS_growth",
-    "TWA00"
+    "EPS_growth"
   ],
   "has_detail": [
     "Top200",
@@ -26,5 +25,5 @@
     "Margin_growth",
     "EPS_growth"
   ],
-  "generated_at": "2025-12-31 14:46:53"
+  "generated_at": "2025-12-31 17:19:17"
 }

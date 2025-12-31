@@ -308,18 +308,18 @@ def main():
 
     # ---- 5.5) Benchmark：加權指數 ----
     # ⚠ 你原本是寫死 C: 路徑，這裡改成：優先用 APP_ROOT/更新因子.xlsx，找不到才用原本路徑
-    tw_fp1 = APP_ROOT / "更新因子.xlsx"
-    tw_fp2 = Path("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx")
+    # tw_fp1 = APP_ROOT / "更新因子.xlsx"
+    # tw_fp2 = Path("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx")
 
-    tw_fp = tw_fp1 if tw_fp1.exists() else tw_fp2
-    if not tw_fp.exists():
-        raise FileNotFoundError(f"找不到加權指數檔案：{tw_fp1} 或 {tw_fp2}")
+    # tw_fp = tw_fp1 if tw_fp1.exists() else tw_fp2
+    # if not tw_fp.exists():
+    #     raise FileNotFoundError(f"找不到加權指數檔案：{tw_fp1} 或 {tw_fp2}")
 
-    tw = pd.read_excel(tw_fp, sheet_name="加權指數")
-    tw = tw.iloc[4:, 1:]
-    tw.columns = ["date", "twa00"]
-    tw = tw.set_index("date")
-    ret_twa00 = tw.pct_change().dropna()["twa00"]
+    # tw = pd.read_excel(tw_fp, sheet_name="加權指數")
+    # tw = tw.iloc[4:, 1:]
+    # tw.columns = ["date", "twa00"]
+    # tw = tw.set_index("date")
+    # ret_twa00 = tw.pct_change().dropna()["twa00"]
 
     # ---- 6) 輸出到 data/returns/*.json ----
     outputs: Dict[str, pd.Series] = {
@@ -333,8 +333,9 @@ def main():
         "High_yield": ret_high_yield,
         "High_yoy": ret_high_yoy,
         "Margin_growth": ret_rev_growth,
-        "EPS_growth": ret_eps_growth,
-        "TWA00": ret_twa00,
+        "EPS_growth": ret_eps_growth
+        # ,
+        # "TWA00": ret_twa00,
     }
 
     exported = []

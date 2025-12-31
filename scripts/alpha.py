@@ -894,7 +894,7 @@ def yoy_high_signal(
     month_key = r.index.to_period("M")
 
     for m in month_key.unique():
-        prev_m = m - 2
+        prev_m = m - 1
 
         # --- 這一行是關鍵修正：本月 m 的宇宙該用 pool[m] ---
         universe = pd.Index(sorted(mktcap_pool.get(m, set()))).astype(str).str.strip()  # ← 修正
