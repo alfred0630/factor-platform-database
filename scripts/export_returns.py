@@ -307,7 +307,7 @@ def main():
     ret_eps_growth = alp_return(eps_up, returns)
 
     # ---- 5.5) Benchmark：加權指數 ----
-    # ⚠ 你原本是寫死 C: 路徑，這裡改成：優先用 APP_ROOT/更新因子.xlsx，找不到才用原本路徑
+   
     tw_fp1 = APP_ROOT / "更新因子.xlsx"
     tw_fp2 = Path("C:/Users/admin/Desktop/factor-platform/更新因子.xlsx")
 
