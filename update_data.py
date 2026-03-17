@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 
@@ -6,7 +5,6 @@ import re
 
 import importlib
 import clean_data
-
 
 
 import pandas as pd
@@ -147,14 +145,39 @@ def to_ym_by_code(df):
 # res.to_csv("cleaned.csv", encoding="utf-8-sig")
 # res.to_excel("cleaned.xlsx")
 
+price = pd.read_csv("merged_csvs/price.csv",parse_dates=["date"],index_col="date")
+
+import pandas as pd
+
+# 設定資料夾路徑前綴，方便修改
+path = "merged_csvs/"
+
+# 開始依序匯入所有 CSV 檔案
+beta      = pd.read_csv(f"{path}beta.csv",      parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+earn_yoy  = pd.read_csv(f"{path}earn_yoy.csv",  parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+eps       = pd.read_csv(f"{path}eps.csv",       parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+gross     = pd.read_csv(f"{path}gross.csv",     parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+mktcap    = pd.read_csv(f"{path}mktcap.csv",    parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+pb_ratio  = pd.read_csv(f"{path}pb_ratio.csv",  parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+pe_ratio  = pd.read_csv(f"{path}pe_ratio.csv",  parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+
+rev       = pd.read_csv(f"{path}rev.csv",       parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+yd        = pd.read_csv(f"{path}yd.csv",        parse_dates=["Unnamed: 0"], index_col="Unnamed: 0")
+
+print("所有因子資料已匯入完成！")
+
+
+
 import pandas as pd
 
 # === 因子資料 ===
-pe_df      = pd.read_excel("更新因子.xlsx", sheet_name="本益比")
-pb_df      = pd.read_excel("更新因子.xlsx", sheet_name="pb")
-yields_df  = pd.read_excel("更新因子.xlsx", sheet_name="殖利率")
-beta_df    = pd.read_excel("更新因子.xlsx", sheet_name="Beta")
-mv_df      = pd.read_excel("更新因子.xlsx", sheet_name="市值_")
+pe_df      = pd.read_excel("更新因子.xlsx", sheet_name="本益比", dtype=object)
+pb_df      = pd.read_excel("更新因子.xlsx", sheet_name="pb", dtype=object)
+yields_df  = pd.read_excel("更新因子.xlsx", sheet_name="殖利率", dtype=object)
+beta_df    = pd.read_excel("更新因子.xlsx", sheet_name="Beta", dtype=object)
+mv_df      = pd.read_excel("更新因子.xlsx", sheet_name="市值_", dtype=object)
+
+
 
 pe_new     = to_ym_by_code(pe_df)
 pb_new     = to_ym_by_code(pb_df)
@@ -162,23 +185,24 @@ beta_new   = to_ym_by_code(beta_df)
 mv_new     = to_ym_by_code(mv_df)
 yields_new = to_ym_by_code(yields_df)
 
+
 # === 收盤價 ===
-price_df = pd.read_excel("更新因子.xlsx", sheet_name="收盤價")
+price_df = pd.read_excel("更新因子.xlsx", sheet_name="收盤價", dtype=object)
 cleaned_price_new = clean_price(price_df.iloc[:, 4:].drop(index=0, axis=0))
 
 # === EPS ===
-eps_df = pd.read_excel("更新因子.xlsx", sheet_name="預估eps")
+eps_df = pd.read_excel("更新因子.xlsx", sheet_name="預估eps", dtype=object)
 cleaned_eps_new = clean_eps(eps_df.iloc[:, 4:].drop(index=0, axis=0))
 
 # === 毛利率與營業利益率 ===
-gross_df = pd.read_excel("更新因子.xlsx", sheet_name="毛利率")
-rev_df   = pd.read_excel("更新因子.xlsx", sheet_name="營業利益率")
+gross_df = pd.read_excel("更新因子.xlsx", sheet_name="毛利率", dtype=object)
+rev_df   = pd.read_excel("更新因子.xlsx", sheet_name="營業利益率", dtype=object)
 
 gross_new = clean_code_table_ready(gross_df.iloc[:, 4:].drop(index=0, axis=0))
 rev_new   = clean_code_table_ready(rev_df.iloc[:, 4:].drop(index=0, axis=0))
 
 # === 月營收 ===
-rev_month_df = pd.read_excel("更新因子.xlsx", sheet_name="月營收")
+rev_month_df = pd.read_excel("更新因子.xlsx", sheet_name="月營收", dtype=object)
 rev_month_new = clean_eps(rev_month_df.iloc[:, 4:].drop(index=0, axis=0))
 
 
@@ -197,174 +221,79 @@ rev_month_new.index = rev_month_new.index.astype(str).str.strip().str[:4] + "-" 
 # === 日資料：保留原日期格式 ===
 cleaned_price_new.index = pd.to_datetime(cleaned_price_new.index.astype(str).str.strip(), errors="coerce")
 
+
+
+
+
+
+
+
+
+
+
 print("✔ 月資料已轉為 YYYY-MM；cleaned_price_new 保留日期格式")
 
 
-import pandas as pd
-import numpy as np
-import re
-import importlib
-import clean_data
 
-# 重新載入自訂模組（確保是最新版本）
-importlib.reload(clean_data)
-from clean_data import clean_mktcap, clean_price
 
-# === 匯入原始 Excel 各工作表 ===
-price_raw      = pd.read_excel("因子資料全.xlsx", sheet_name="收盤價")        # 原始收盤價
-mktcap_raw     = pd.read_excel("因子資料全.xlsx", sheet_name="市值")         # 市值
-pe_raw         = pd.read_excel("因子資料全.xlsx", sheet_name="低本益比")     # 本益比
-pb_raw         = pd.read_excel("因子資料全.xlsx", sheet_name="低PB")         # 淨值比
-yield_raw      = pd.read_excel("因子資料全.xlsx", sheet_name="殖利率")       # 殖利率
-beta_raw       = pd.read_excel("因子資料全.xlsx", sheet_name="Beta")         # Beta
+# 1. 本益比 (pe)
+pe_final = pe_new.combine_first(pe_ratio).sort_index()
 
-earning_raw    = pd.read_excel("因子資料全.xlsx", sheet_name="月營收")       # 月營收
-gross_raw      = pd.read_excel("因子資料全.xlsx", sheet_name="毛利率")      # 毛利率
-rev_raw        = pd.read_excel("因子資料全.xlsx", sheet_name="營利率")      # 營業利益率
+# 2. 股價淨值比 (pb)
+pb_final = pb_new.combine_first(pb_ratio).sort_index()
 
-finance_raw    = pd.read_excel("因子資料全.xlsx", sheet_name="金融保險（含下市櫃）")  # 金融保險
-eps_raw        = pd.read_excel("因子資料全.xlsx", sheet_name="月預估EPS")    # 預估 EPS
+# 3. 殖利率 (yd)
+yd_final = yields_new.combine_first(yd).sort_index()
 
-# === 清洗與命名 ===
+# 4. Beta
+beta_final = beta_new.combine_first(beta).sort_index()
 
-price    = clean_price(price_raw)
-mktcap   = clean_mktcap(mktcap_raw)
-pe_ratio = clean_mktcap(pe_raw)
-pb_ratio = clean_mktcap(pb_raw)
-yd       = clean_mktcap(yield_raw)
-beta     = clean_mktcap(beta_raw)
-earn_yoy = clean_mktcap(earning_raw)
-gross    = clean_mktcap(gross_raw)
-rev      = clean_mktcap(rev_raw)
-eps      = clean_mktcap(eps_raw)
+# 5. 市值 (mktcap)
+mktcap_final = mv_new.combine_first(mktcap).sort_index()
 
-# === 額外衍生變數 ===
-returns  = price.pct_change()  # 報酬率矩陣（日線）
+# 6. 每股盈餘 (eps)
+eps_final = cleaned_eps_new.combine_first(eps).sort_index()
 
-print("✔ 所有因子已載入並清洗完成")
-import pandas as pd
+# 7. 毛利率 (gross)
+gross_final = gross_new.combine_first(gross).sort_index()
 
-VAR_MAP = {
-    "pe_new":            "pe_ratio",
-    "pb_new":            "pb_ratio",
-    "yields_new":        "yd",
-    "beta_new":          "beta",
-    "mv_new":            "mktcap",
-    "cleaned_price_new": "price",     # 日資料
-    "cleaned_eps_new":   "eps",
-    "gross_new":         "gross",
-    "rev_new":           "rev",
-    "rev_month_new":     "earn_yoy",
+# 8. 營業利益率 (rev)
+rev_final = rev_new.combine_first(rev).sort_index()
+
+earn_yoy_final = rev_month_new.combine_first(earn_yoy).sort_index()
+
+# 9. 收盤價 (price)
+price_final = cleaned_price_new.combine_first(price).sort_index()
+
+print("✔ 合併完成：已保留歷史資料，並用新資料更新重疊部分。")
+
+# 建立一個映射表：{ "檔名": 變數 }
+save_map = {
+    "pe_ratio.csv": pe_final,
+    "pb_ratio.csv": pb_final,
+    "yd.csv":       yd_final,
+    "beta.csv":     beta_final,
+    "mktcap.csv":   mktcap_final,
+    "eps.csv":      eps_final,
+    "gross.csv":    gross_final,
+    "rev.csv":      rev_final,
+    "earn_yoy.csv": earn_yoy_final,
+    "price.csv":    price_final
 }
 
-def _as_dt_index_and_cols(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    # 若有 month/period 欄位就設為 index
-    if out.index.dtype == object and str(out.index.name).lower() in ["month", "period"]:
-        pass
-    else:
-        for cand in ["month", "period"]:
-            if cand in out.columns:
-                out = out.set_index(cand)
-                break
-
-    # 轉 datetime（支援 YYYYMM）
-    idx_str = out.index.astype(str).str.strip()
-    mask_yyyymm = idx_str.str.fullmatch(r"\d{6}")
-    idx_dt = pd.to_datetime(pd.Series(idx_str.where(~mask_yyyymm, idx_str + "01"),
-                                      index=out.index),
-                            errors="coerce")
-    out.index = idx_dt
-
-    # 去時區、normalize、去重
-    if getattr(out.index, "tz", None) is not None:
-        out.index = out.index.tz_localize(None)
-    out.index = out.index.normalize()
-    if not out.index.is_unique:
-        out = out.groupby(level=0).last()
-
-    # 欄名清理
-    out.columns = out.columns.map(lambda x: str(x).strip())
-    if out.columns.duplicated().any():
-        out = out.loc[:, ~out.columns.duplicated(keep="last")]
-    return out.sort_index()
-
-def merge_update_df(dst: pd.DataFrame, src: pd.DataFrame) -> pd.DataFrame:
-    """以 src 非 NA 覆蓋 dst；回傳 DatetimeIndex（不轉字串）。"""
-    dst = _as_dt_index_and_cols(dst)
-    src = _as_dt_index_and_cols(src)
-
-    all_idx = dst.index.union(src.index)
-    all_col = dst.columns.union(src.columns)
-
-    dst2 = dst.reindex(index=all_idx, columns=all_col)
-    src2 = src.reindex(index=all_idx, columns=all_col)
-
-    return dst2.where(src2.isna(), src2)  # 來源優先覆蓋
-
-# === 產出 merged，不改動原始變數 ===
-merged = {}
-log = []
-
-for src_name, dst_name in VAR_MAP.items():
-    g = globals()
-    if src_name in g and dst_name in g \
-       and isinstance(g[src_name], pd.DataFrame) \
-       and isinstance(g[dst_name], pd.DataFrame):
-
-        before_shape = g[dst_name].shape
-        res = merge_update_df(g[dst_name], g[src_name])
-
-        # ✅ 在這裡決定 index 輸出格式：price 保留 YYYY-MM-DD，其餘 YYYY-MM
-        if isinstance(res.index, pd.DatetimeIndex):
-            if dst_name == "price":
-                res.index = res.index.strftime("%Y-%m-%d")
-            else:
-                res.index = res.index.strftime("%Y-%m")
-
-        after_shape = res.shape
-        merged[dst_name] = res
-        log.append(f"✔ {src_name} + {dst_name} → merged['{dst_name}']  {before_shape} → {after_shape}")
-    else:
-        log.append(f"… 略過 {src_name} -> {dst_name}（其中一邊不存在或不是 DataFrame）")
-
-print("\n".join(log))
 
 
-import pandas as pd
 import os
 
-# === 設定輸出資料夾 ===
-output_folder = "merged_csvs"
-os.makedirs(output_folder, exist_ok=True)
+# 1. 定義路徑
+path = "merged_csvs/"
 
-# === 建立要輸出的字典 ===
-output_dict = merged.copy()
+# 2. 檢查資料夾是否存在，不存在就建立它 (關鍵修正！)
+if not os.path.exists(path):
+    os.makedirs(path)
+    print(f"📁 偵測到資料夾不存在，已自動建立：{path}")
+# 用一個簡單的迴圈一次搞定
+for filename, df in save_map.items():
+    df.to_csv(f"{path}{filename}")
+    print(f"✅ {filename} 已更新")
 
-# 若有想補的 raw 資料
-raw_vars = ["finance_raw"]
-
-g = globals()
-for var in raw_vars:
-    if var.replace("_raw", "") not in output_dict and var in g and isinstance(g[var], pd.DataFrame):
-        df = g[var]
-        if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index, errors="ignore")
-        output_dict[var.replace("_raw", "")] = df
-
-# === 每個 DataFrame 各存成一個 CSV（index 格式化） ===
-for name, df in output_dict.items():
-    df_to_save = df.copy()
-
-    # ✅ 根據名稱決定 index 格式
-    if isinstance(df_to_save.index, pd.DatetimeIndex):
-        if name == "price":
-            df_to_save.index = df_to_save.index.strftime("%Y-%m-%d")  # 收盤價保留日
-        else:
-            df_to_save.index = df_to_save.index.strftime("%Y-%m")      # 其他只保留年月
-
-    file_path = os.path.join(output_folder, f"{name}.csv")
-    df_to_save.to_csv(file_path, encoding="utf-8-sig")
-    print(f"✔ 已輸出：{file_path}")
-
-print(f"\n✅ 全部完成，共輸出 {len(output_dict)} 個 CSV 檔到資料夾：{output_folder}")
