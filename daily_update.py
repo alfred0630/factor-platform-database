@@ -3,37 +3,39 @@ import sys
 from pathlib import Path
 
 PROJECT_DIR = Path(r"C:\Users\admin\Desktop\factor-platform")
-PYTHON_EXE = PROJECT_DIR / ".venv" / "Scripts" / "python.exe"
+PYTHON_EXE = sys.executable
 
-def run_cmd(cmd, cwd=PROJECT_DIR):
+def run_cmd(cmd, cwd=PROJECT_DIR, allow_fail=False):
     print(f"\n>>> 執行: {' '.join(map(str, cmd))}")
-    result = subprocess.run(cmd, cwd=cwd, check=True)
+    result = subprocess.run(cmd, cwd=cwd)
+    if result.returncode != 0 and not allow_fail:
+        raise RuntimeError(f"指令失敗，return code = {result.returncode}")
     return result
 
 def main():
-    # # 1. 更新 Excel / CMoney 資料
-    # run_cmd([str(PYTHON_EXE), "xlsx_automation.py"])
+    # 1. 更新 Excel / CMoney
+    run_cmd([PYTHON_EXE, "xlsx_automation.py"])
 
-    # # 2. 跑資料整理主流程
-    # run_cmd([str(PYTHON_EXE), "run_all.py"])
+    # 2. 跑主流程
+    run_cmd([PYTHON_EXE, "run_all.py"])
 
-    # 3. git add
+    # 3. Git
     run_cmd(["git", "add", "."])
 
-    # 4. git commit
-    # 沒有變更時 commit 可能失敗，所以這裡可以容忍
-    try:
-        run_cmd(["git", "commit", "-m", "daily data update"])
-    except subprocess.CalledProcessError:
+    commit_result = run_cmd(
+        ["git", "commit", "-m", "daily data update"],
+        allow_fail=True
+    )
+    if commit_result.returncode != 0:
         print(">>> 沒有可提交的變更，略過 commit")
 
-    # 5. git push
     run_cmd(["git", "push"])
+
+    print("\n✅ 全部流程完成")
 
 if __name__ == "__main__":
     try:
         main()
-        print("\n✅ 全部流程完成")
     except Exception as e:
         print(f"\n❌ 流程失敗: {e}")
         sys.exit(1)

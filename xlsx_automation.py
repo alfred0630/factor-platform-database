@@ -7,7 +7,7 @@ import win32com.client as win32
 import pyautogui
 import pygetwindow as gw
 
-FILE_PATH = r"C:\Users\admin\Desktop\factor-platform\更新因子.xlsx"
+FILE_PATH = r"C:\Users\admin\Desktop\factor-platform\更新因子_test_copy.xlsx"
 SAVE_COPY_PATH = r"C:\Users\admin\Desktop\factor-platform\更新因子.xlsx"
 
 # 先填「增益集分頁」座標
