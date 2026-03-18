@@ -1,3 +1,13 @@
 /merged_csvs
 /因子資料全.xlsx
 /更新因子.xlsx
+# Python virtual env
+.venv/
+
+apps/api/.venv
+apps/api/.venv/
+apps/api/.venv/**
+
+# Python cache
+__pycache__/
+*.pyc
