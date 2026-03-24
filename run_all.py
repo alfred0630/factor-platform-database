@@ -20,3 +20,4 @@ for script in scripts:
 print("\nAll scripts finished.")
 
 ## 更新要下指令  python run_all.py
+#tt
