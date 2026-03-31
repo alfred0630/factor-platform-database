@@ -12,3 +12,4 @@ apps/api/.venv/**
 # Python cache
 __pycache__/
 *.pyc
+更新因子.xlsx
