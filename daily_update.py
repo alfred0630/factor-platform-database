@@ -13,6 +13,8 @@ def run_cmd(cmd, cwd=PROJECT_DIR, allow_fail=False):
     return result
 
 def main():
+
+    
     # 1. 更新 Excel / CMoney
     run_cmd([PYTHON_EXE, "xlsx_automation.py"])
 

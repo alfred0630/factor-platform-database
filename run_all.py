@@ -18,3 +18,6 @@ for script in scripts:
         break
 
 print("\nAll scripts finished.")
+
+##  更新不能按Run的鍵  一定要用指令更新
+##  更新要下指令  python run_all.py
